@@ -1,135 +1,70 @@
 name: TikTok Downloader → ZIP → Filebin
 
-# ── PKT 01:00 AM = UTC 20:00 (previous day) ──
-# Pakistan Standard Time = UTC+5
-# Toh 01:00 PKT = 20:00 UTC (raat pichle din)
+# PKT 01:00 AM  =  UTC 20:00 (previous day)
 on:
   schedule:
-    - cron: "0 20 * * *"   # Har roz UTC 20:00 = PKT 01:00 AM
+    - cron: "0 20 * * *"
 
-  # Manual trigger bhi rakha hai (testing ke liye)
-  workflow_dispatch:
-    inputs:
-      videos_per_user:
-        description: "Har user se kitni videos (default: 10)"
-        required: false
-        default: "10"
+  workflow_dispatch:   # Manual trigger for testing
 
-# ── Permissions ──
 permissions:
-  contents: write   # History files commit karne ke liye
+  contents: write      # History commit ke liye
 
 jobs:
-  download-and-upload:
-    name: Download TikTok Videos
+  download:
+    name: Download & Upload
     runs-on: ubuntu-latest
-    timeout-minutes: 360   # Max 6 ghante (bohat saari videos)
+    timeout-minutes: 120   # 2 hour max (5 videos × 19 users = ~95 videos)
 
     steps:
-      # ── Step 1: Repo clone karo ──
-      - name: 📥 Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0   # Puri history chahiye commit ke liye
 
-      # ── Step 2: Python setup ──
-      - name: 🐍 Setup Python 3.11
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🐍 Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: "pip"
+          cache: pip
 
-      # ── Step 3: FFmpeg install ──
       - name: 🎬 Install FFmpeg
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg
           ffmpeg -version | head -1
-          echo "✅ FFmpeg ready"
 
-      # ── Step 4: Python packages install ──
-      - name: 📦 Install Python Dependencies
-        run: |
-          pip install --upgrade pip
-          pip install yt-dlp requests ffmpeg-python
-          echo "✅ Packages installed"
+      - name: 📦 Install packages
+        run: pip install -q yt-dlp requests
 
-      # ── Step 5: History file restore (agar pehle se hai) ──
-      - name: 📂 Show current state
+      - name: 📂 Show history state
         run: |
-          echo "=== Repository files ==="
-          ls -la
-          if [ -f "download_history.txt" ]; then
-            echo "=== History entries ==="
-            wc -l download_history.txt
+          if [ -f download_history.txt ]; then
+            echo "Already downloaded: $(wc -l < download_history.txt) videos"
+            echo "Last 5 IDs:"
+            tail -5 download_history.txt
           else
-            echo "No history file yet (fresh start)"
-          fi
-          if [ -f "user_index.txt" ]; then
-            echo "=== User index ==="
-            cat user_index.txt
+            echo "No history yet — fresh start"
           fi
 
-      # ── Step 6: MAIN SCRIPT CHALAO ──
-      - name: 🚀 Run TikTok Downloader
-        id: downloader
-        env:
-          # Agar aap chahein to VIDEOS_PER_USER override kar sako
-          VIDEOS_PER_USER: ${{ github.event.inputs.videos_per_user || '10' }}
+      - name: 🚀 Run Downloader
+        id: run
         run: |
-          echo "=============================="
-          echo "  Starting TikTok Downloader"
-          echo "  PKT Time: $(TZ='Asia/Karachi' date)"
-          echo "  UTC Time: $(date)"
-          echo "=============================="
+          echo "PKT Time: $(TZ='Asia/Karachi' date '+%Y-%m-%d %H:%M PKT')"
           python main.py
 
-      # ── Step 7: History + index files commit karo ──
-      - name: 💾 Commit Updated History Files
-        if: always()   # Fail hone pe bhi history save karo
+      - name: 💾 Commit history file
+        if: always()
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # Sirf tracked files add karo
-          git add download_history.txt user_index.txt 2>/dev/null || true
-
-          # Check karo kuch changes hai
+          git add download_history.txt 2>/dev/null || true
           if git diff --staged --quiet; then
-            echo "📝 No changes to commit (history same hai)"
+            echo "No new history to commit"
           else
-            PKT_TIME=$(TZ='Asia/Karachi' date '+%Y-%m-%d %H:%M PKT')
-            git commit -m "📥 TikTok history update - ${PKT_TIME}"
+            git commit -m "history update $(TZ='Asia/Karachi' date '+%Y-%m-%d %H:%M PKT')"
             git push
-            echo "✅ History committed and pushed"
           fi
 
-      # ── Step 8: Cleanup (disk space) ──
-      - name: 🗑️ Cleanup Temp Folders
+      - name: 🗑️ Cleanup temp files
         if: always()
-        run: |
-          rm -rf raw_videos/ final_videos/ zips/ 2>/dev/null || true
-          echo "✅ Temp folders cleaned"
-
-      # ── Step 9: Job Summary ──
-      - name: 📋 Job Summary
-        if: always()
-        run: |
-          echo "## 🎬 TikTok Downloader Report" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| ⏰ PKT Time | $(TZ='Asia/Karachi' date '+%Y-%m-%d %H:%M PKT') |" >> $GITHUB_STEP_SUMMARY
-          echo "| 📅 UTC Time | $(date -u '+%Y-%m-%d %H:%M UTC') |" >> $GITHUB_STEP_SUMMARY
-          echo "| 👥 Total Users | $(echo '${{ env.TOTAL_USERS }}' || echo '19') |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          if [ -f "download_history.txt" ]; then
-            TOTAL=$(wc -l < download_history.txt)
-            echo "| 📚 Total Downloaded (all time) | ${TOTAL} videos |" >> $GITHUB_STEP_SUMMARY
-          fi
-
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🔗 Links" >> $GITHUB_STEP_SUMMARY
-          echo "- Download ZIP from [filebin.net](https://filebin.net)" >> $GITHUB_STEP_SUMMARY
-          echo "- Bin link script ke output mein dekho" >> $GITHUB_STEP_SUMMARY
+        run: rm -rf raw_videos/ final_videos/ zips/ 2>/dev/null || true
