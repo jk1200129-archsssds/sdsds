@@ -14,7 +14,7 @@ jobs:
   download:
     name: Download & Upload
     runs-on: ubuntu-latest
-    timeout-minutes: 120   # 2 hour max (5 videos × 19 users = ~95 videos)
+    timeout-minutes: 120
 
     steps:
 
@@ -51,6 +51,28 @@ jobs:
         run: |
           echo "PKT Time: $(TZ='Asia/Karachi' date '+%Y-%m-%d %H:%M PKT')"
           python main.py
+
+      - name: 🔗 Show Download Link
+        if: always()
+        run: |
+          echo ""
+          echo "════════════════════════════════════════════════"
+          echo "  ✅  DOWNLOAD LINK NEECHE HAI"
+          echo "════════════════════════════════════════════════"
+          if [ -n "${{ steps.run.outputs.bin_url }}" ]; then
+            echo ""
+            echo "  📁 Bin Page     : ${{ steps.run.outputs.bin_url }}"
+            echo "  📦 ZIP Download : ${{ steps.run.outputs.download_url }}"
+            echo "  🎬 Total Videos : ${{ steps.run.outputs.total_downloaded }}"
+            echo ""
+            echo "  👆 ZIP Download link browser mein open karo"
+            echo "     seedha download shuru ho jayega"
+          else
+            echo "  ⚠️  Script output nahi mila — upar logs check karo"
+          fi
+          echo "════════════════════════════════════════════════"
+          echo ""
+          echo "💡 TIP: Is page pe Summary tab bhi dekho — wahan bhi link hai"
 
       - name: 💾 Commit history file
         if: always()
