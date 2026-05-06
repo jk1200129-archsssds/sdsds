@@ -315,13 +315,46 @@ def main():
     if bin_url and os.path.exists(zip_path):
         os.remove(zip_path)
 
-    # ── GitHub output ──
+    # ── GitHub Actions output variables ──
     gho = os.environ.get("GITHUB_OUTPUT","")
     if gho:
         with open(gho,"a") as f:
             f.write(f"bin_url={bin_url or 'FAILED'}\n")
             f.write(f"download_url={dl_url or 'FAILED'}\n")
             f.write(f"total_downloaded={ok_count}\n")
+
+    # ── GitHub Actions Job Summary (Actions page pe bada box dikhega) ──
+    summary_file = os.environ.get("GITHUB_STEP_SUMMARY","")
+    if summary_file:
+        pkt_str = pkt.strftime("%Y-%m-%d %H:%M PKT")
+        with open(summary_file,"a") as f:
+            f.write("# 🎬 TikTok Download Report\n\n")
+            f.write(f"**Run Time:** {pkt_str}\n\n")
+            f.write("---\n\n")
+            f.write("## 📥 Download Links\n\n")
+            if bin_url:
+                f.write(f"| | Link |\n")
+                f.write(f"|---|---|\n")
+                f.write(f"| 📁 **Bin Page** (sab files dekho) | [{bin_url}]({bin_url}) |\n")
+                f.write(f"| 📦 **ZIP Direct Download** | [{dl_url}]({dl_url}) |\n")
+                f.write(f"| ⏰ **Expires** | 6 din baad auto delete |\n\n")
+                f.write(f"> **ZIP download karne ka tarika:**\n")
+                f.write(f"> 1. Upar ZIP link pe click karo\n")
+                f.write(f"> 2. Ya phir Bin Page pe jao → sab files dekho\n\n")
+            else:
+                f.write("❌ **Upload fail hua** — logs check karo\n\n")
+            f.write("---\n\n")
+            f.write("## 📊 Stats\n\n")
+            f.write(f"| Item | Count |\n")
+            f.write(f"|---|---|\n")
+            f.write(f"| ✅ Downloaded | {ok_count} videos |\n")
+            f.write(f"| ❌ Failed | {fail_count} videos |\n")
+            f.write(f"| 👥 Users processed | {len(TARGET_USERNAMES)} |\n")
+            f.write(f"| 🎯 Per user target | {VIDEOS_PER_USER} videos |\n")
+            f.write(f"| ⏱ Max duration | {MAX_DURATION}s |\n\n")
+            if os.path.exists(HISTORY_FILE):
+                total_hist = sum(1 for _ in open(HISTORY_FILE))
+                f.write(f"| 📚 Total all-time downloaded | {total_hist} videos |\n")
 
     print("\n🏁 Done!")
 
